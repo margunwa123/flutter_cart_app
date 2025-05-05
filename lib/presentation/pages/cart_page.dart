@@ -28,7 +28,10 @@ class _CartPageState extends State<CartPage> {
   DateTime? startDate;
   DateTime? endDate;
   int _currentPage = 0;
-  final int _itemsPerPage = 5;
+  // Since the cart API doesn't actually support pagination, we'll simulate pagination
+  // by fetching all carts, then managing it in this individual component
+  int _itemsPerPage = 5;
+  final List<int> _availablePageSizes = [5, 10, 15, 20];
 
   @override
   void initState() {
@@ -67,6 +70,9 @@ class _CartPageState extends State<CartPage> {
                 const SnackBar(content: Text('Cart created successfully')),
               );
               context.read<CartBloc>().add(LoadCartsEvent());
+              setState(() {
+                _currentPage = 0;
+              });
             } else if (state is CartError) {
               ScaffoldMessenger.of(
                 context,
@@ -83,16 +89,6 @@ class _CartPageState extends State<CartPage> {
               carts = state.carts;
             }
 
-            final int totalPages = (carts.length / _itemsPerPage).ceil();
-            final int startIndex = _currentPage * _itemsPerPage;
-            final int endIndex =
-                startIndex + _itemsPerPage > carts.length
-                    ? carts.length
-                    : startIndex + _itemsPerPage;
-
-            final List<Cart> paginatedCarts =
-                carts.isEmpty ? [] : carts.sublist(startIndex, endIndex);
-
             return Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -104,9 +100,8 @@ class _CartPageState extends State<CartPage> {
                     child:
                         carts.isEmpty
                             ? const Center(child: Text('No carts found'))
-                            : _buildCartTable(paginatedCarts),
+                            : _buildCartTable(carts),
                   ),
-                  if (carts.isNotEmpty) _buildPagination(totalPages),
                 ],
               ),
             );
@@ -196,6 +191,9 @@ class _CartPageState extends State<CartPage> {
                       endDate: dateFormat.format(endDate!),
                     ),
                   );
+                  setState(() {
+                    _currentPage = 0;
+                  });
                 }
               },
               child: const Text('Filter'),
@@ -207,6 +205,7 @@ class _CartPageState extends State<CartPage> {
                 setState(() {
                   startDate = null;
                   endDate = null;
+                  _currentPage = 0;
                 });
                 context.read<CartBloc>().add(LoadCartsEvent());
               },
@@ -218,66 +217,265 @@ class _CartPageState extends State<CartPage> {
   }
 
   Widget _buildCartTable(List<Cart> carts) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    final int totalPages = (carts.length / _itemsPerPage).ceil();
+    final int startIndex = _currentPage * _itemsPerPage;
+    final int endIndex =
+        startIndex + _itemsPerPage > carts.length
+            ? carts.length
+            : startIndex + _itemsPerPage;
 
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('ID')),
-          DataColumn(label: Text('Products')),
-          DataColumn(label: Text('Date')),
-          DataColumn(label: Text('Actions')),
-        ],
-        rows:
-            carts.map((cart) {
-              return DataRow(
-                cells: [
-                  DataCell(Text('${cart.id}')),
-                  DataCell(Text('${cart.products.length} items')),
-                  DataCell(Text(_formatDateToReadable(cart.date) ?? "-")),
-                  DataCell(
-                    IconButton(
-                      icon: const Icon(Icons.info),
-                      onPressed: () {
-                        _showCartDetails(context, cart);
-                      },
-                    ),
+    final List<Cart> paginatedCarts =
+        carts.isEmpty ? [] : carts.sublist(startIndex, endIndex);
+
+    return Column(
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SingleChildScrollView(
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(Colors.grey.shade200),
+              columns: const [
+                DataColumn(
+                  label: Text(
+                    'ID',
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                ],
-              );
-            }).toList(),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Products',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Date',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Actions',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+              rows:
+                  paginatedCarts.map((cart) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text('${cart.id}')),
+                        DataCell(Text('${cart.products.length} items')),
+                        DataCell(Text(_formatDateToReadable(cart.date) ?? "-")),
+                        DataCell(
+                          IconButton(
+                            icon: const Icon(Icons.info),
+                            onPressed: () {
+                              _showCartDetails(context, cart);
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            const Text('Items per page: '),
+            DropdownButton<int>(
+              value: _itemsPerPage,
+              items:
+                  _availablePageSizes.map((pageSize) {
+                    return DropdownMenuItem<int>(
+                      value: pageSize,
+                      child: Text('$pageSize'),
+                    );
+                  }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _itemsPerPage = value;
+                    _currentPage = 0;
+                  });
+                }
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        if (carts.isNotEmpty)
+          Column(
+            children: [
+              _buildPaginationInfo(paginatedCarts.length, carts.length),
+              _buildPagination(totalPages),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPaginationInfo(int entries, int totalItems) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Text(
+        'Showing $entries of $totalItems entries',
+        style: const TextStyle(fontStyle: FontStyle.italic),
       ),
     );
   }
 
   Widget _buildPagination(int totalPages) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed:
-              _currentPage > 0
-                  ? () {
-                    setState(() {
-                      _currentPage--;
-                    });
-                  }
-                  : null,
+    if (totalPages <= 1) {
+      return const SizedBox.shrink();
+    }
+
+    List<int> pageNumbers = [];
+
+    pageNumbers.add(0);
+
+    if (_currentPage > 1) {
+      pageNumbers.add(_currentPage - 1);
+    }
+
+    if (_currentPage > 0) {
+      pageNumbers.add(_currentPage);
+    }
+
+    if (_currentPage < totalPages - 1) {
+      pageNumbers.add(_currentPage + 1);
+    }
+
+    if (totalPages > 1) {
+      pageNumbers.add(totalPages - 1);
+    }
+
+    pageNumbers = pageNumbers.toSet().toList();
+    pageNumbers.sort();
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.first_page),
+              onPressed:
+                  _currentPage > 0
+                      ? () {
+                        setState(() {
+                          _currentPage = 0;
+                        });
+                      }
+                      : null,
+              tooltip: 'First Page',
+            ),
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed:
+                  _currentPage > 0
+                      ? () {
+                        setState(() {
+                          _currentPage--;
+                        });
+                      }
+                      : null,
+              tooltip: 'Previous Page',
+            ),
+            ...pageNumbers.map((pageIndex) {
+              if (pageIndex > 0 &&
+                  pageNumbers.contains(pageIndex - 1) &&
+                  pageIndex - 1 !=
+                      pageNumbers[pageNumbers.indexOf(pageIndex) - 1]) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Text('...'),
+                    ),
+                    _buildPageButton(pageIndex, totalPages),
+                  ],
+                );
+              } else if (pageIndex < totalPages - 1 &&
+                  pageNumbers.contains(pageIndex + 1) &&
+                  pageIndex + 1 !=
+                      pageNumbers[pageNumbers.indexOf(pageIndex) + 1]) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildPageButton(pageIndex, totalPages),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Text('...'),
+                    ),
+                  ],
+                );
+              }
+              return _buildPageButton(pageIndex, totalPages);
+            }).toList(),
+            IconButton(
+              icon: const Icon(Icons.arrow_forward),
+              onPressed:
+                  _currentPage < totalPages - 1
+                      ? () {
+                        setState(() {
+                          _currentPage++;
+                        });
+                      }
+                      : null,
+              tooltip: 'Next Page',
+            ),
+            IconButton(
+              icon: const Icon(Icons.last_page),
+              onPressed:
+                  _currentPage < totalPages - 1
+                      ? () {
+                        setState(() {
+                          _currentPage = totalPages - 1;
+                        });
+                      }
+                      : null,
+              tooltip: 'Last Page',
+            ),
+          ],
         ),
-        Text('${_currentPage + 1} / $totalPages'),
-        IconButton(
-          icon: const Icon(Icons.arrow_forward),
-          onPressed:
-              _currentPage < totalPages - 1
-                  ? () {
-                    setState(() {
-                      _currentPage++;
-                    });
-                  }
-                  : null,
+      ),
+    );
+  }
+
+  Widget _buildPageButton(int pageIndex, int totalPages) {
+    final isCurrentPage = pageIndex == _currentPage;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4.0),
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor:
+              isCurrentPage
+                  ? Theme.of(context).primaryColor
+                  : Colors.grey.shade200,
+          foregroundColor: isCurrentPage ? Colors.white : Colors.black,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          minimumSize: const Size(40, 40),
         ),
-      ],
+        onPressed:
+            isCurrentPage
+                ? null
+                : () {
+                  setState(() {
+                    _currentPage = pageIndex;
+                  });
+                },
+        child: Text('${pageIndex + 1}'),
+      ),
     );
   }
 
