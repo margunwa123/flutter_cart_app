@@ -78,27 +78,26 @@ class _CreateCartDialogState extends State<CreateCartDialog> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<Product>(
-                    decoration: const InputDecoration(
-                      labelText: 'Select Product',
-                      border: OutlineInputBorder(),
-                    ),
-                    value: _selectedProduct,
-                    items:
-                        products.map((product) {
-                          return DropdownMenuItem<Product>(
-                            value: product,
-                            child: Text(
-                              product.title,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        }).toList(),
-                    onChanged: (product) {
-                      setState(() {
-                        _selectedProduct = product;
-                      });
+                  GestureDetector(
+                    onTap: () async {
+                      final selected = await _showProductSelectBottomSheet(context, products);
+
+                      if (selected != null) {
+                        setState(() {
+                          _selectedProduct = selected;
+                        });
+                      }
                     },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Select Product',
+                        border: OutlineInputBorder(),
+                      ),
+                      child: Text(
+                        _selectedProduct?.title ?? 'Tap to select a product',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -220,6 +219,29 @@ class _CreateCartDialogState extends State<CreateCartDialog> {
         );
       },
     );
+  }
+
+  Future<Product?> _showProductSelectBottomSheet(BuildContext context, List<Product> products) {
+    return showModalBottomSheet<Product>(
+                      context: context,
+                      builder: (context) {
+                        return ListView.builder(
+                          itemCount: products.length,
+                          itemBuilder: (context, index) {
+                            final product = products[index];
+                            return ListTile(
+                              title: Text(
+                                product.title,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              onTap: () {
+                                Navigator.pop(context, product);
+                              },
+                            );
+                          },
+                        );
+                      },
+                    );
   }
 
   void _showEditQuantityDialog(BuildContext context, int index, CartItem item) {
