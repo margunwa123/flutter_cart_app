@@ -9,6 +9,7 @@ import 'package:ecommerce_app/presentation/blocs/cart/cart_state.dart';
 import 'package:ecommerce_app/presentation/blocs/product/product_bloc.dart';
 import 'package:ecommerce_app/presentation/blocs/product/product_event.dart';
 import 'package:ecommerce_app/presentation/blocs/product/product_state.dart';
+import 'package:ecommerce_app/presentation/widgets/cart_item_widget.dart';
 import 'package:ecommerce_app/presentation/widgets/create_cart_dialog.dart';
 import 'package:ecommerce_app/presentation/widgets/product_dialog.dart';
 import 'package:flutter/material.dart';
@@ -292,17 +293,13 @@ class _CartPageState extends State<CartPage> {
               shrinkWrap: true,
               itemCount: cart.products.length,
               itemBuilder: (context, index) {
-                final product = cart.products[index];
-                return ListTile(
-                  title: Text('Product ID: ${product.productId}'),
-                  subtitle: Text('Quantity: ${product.quantity}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.info),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _showProductDetails(context, product.productId);
-                    },
-                  ),
+                final cartItem = cart.products[index];
+                return CartItemWidget(
+                  cartItem: cartItem,
+                  onViewDetails: (productId) {
+                    Navigator.pop(context);
+                    _showProductDetails(context, productId);
+                  },
                 );
               },
             ),
