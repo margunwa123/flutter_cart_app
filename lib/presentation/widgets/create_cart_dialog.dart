@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:ecommerce_app/domain/entities/cart_item.dart';
 import 'package:ecommerce_app/domain/entities/product.dart';
+import 'package:ecommerce_app/presentation/blocs/product/product_bloc.dart';
+import 'package:ecommerce_app/presentation/blocs/product/product_event.dart';
+import 'package:ecommerce_app/presentation/blocs/product/product_state.dart';
 
 class CreateCartDialog extends StatefulWidget {
-  final List<Product> products;
   final Function(List<CartItem>) onCreateCart;
   
   const CreateCartDialog({
     Key? key,
-    required this.products,
     required this.onCreateCart,
   }) : super(key: key);
 
@@ -22,6 +24,12 @@ class _CreateCartDialogState extends State<CreateCartDialog> {
   final TextEditingController _quantityController = TextEditingController(text: '1');
   
   @override
+  void initState() {
+    super.initState();
+    context.read<ProductBloc>().add(LoadProductsEvent());
+  }
+  
+  @override
   void dispose() {
     _quantityController.dispose();
     super.dispose();
@@ -29,105 +37,149 @@ class _CreateCartDialogState extends State<CreateCartDialog> {
   
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Create New Cart'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<Product>(
-              decoration: const InputDecoration(
-                labelText: 'Select Product',
-                border: OutlineInputBorder(),
+    return BlocBuilder<ProductBloc, ProductState>(
+      builder: (context, state) {
+        if (state is ProductLoading) {
+          return const AlertDialog(
+            content: Center(child: CircularProgressIndicator()),
+          );
+        } else if (state is ProductError) {
+          return AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to load products: ${state.message}'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: const Text('Close'),
               ),
-              value: _selectedProduct,
-              items: widget.products.map((product) {
-                return DropdownMenuItem<Product>(
-                  value: product,
-                  child: Text(
-                    product.title,
-                    overflow: TextOverflow.ellipsis,
+              TextButton(
+                onPressed: () {
+                  context.read<ProductBloc>().add(LoadProductsEvent());
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          );
+        } else if (state is ProductsLoaded) {
+          final products = state.products;
+          
+          return AlertDialog(
+            title: const Text('Create New Cart'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<Product>(
+                    decoration: const InputDecoration(
+                      labelText: 'Select Product',
+                      border: OutlineInputBorder(),
+                    ),
+                    value: _selectedProduct,
+                    items: products.map((product) {
+                      return DropdownMenuItem<Product>(
+                        value: product,
+                        child: Text(
+                          product.title,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (product) {
+                      setState(() {
+                        _selectedProduct = product;
+                      });
+                    },
                   ),
-                );
-              }).toList(),
-              onChanged: (product) {
-                setState(() {
-                  _selectedProduct = product;
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _quantityController,
-              decoration: const InputDecoration(
-                labelText: 'Quantity',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _addToCart,
-              child: const Text('Add to Cart'),
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const Text(
-              'Selected Products',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: _selectedItems.isEmpty
-                  ? const Center(child: Text('No products selected'))
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _selectedItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _selectedItems[index];
-                        final product = widget.products.firstWhere(
-                          (p) => p.id == item.productId,
-                        );
-                        
-                        return ListTile(
-                          title: Text(product.title),
-                          subtitle: Text('Quantity: ${item.quantity}'),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete),
-                            onPressed: () {
-                              setState(() {
-                                _selectedItems.removeAt(index);
-                              });
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _quantityController,
+                    decoration: const InputDecoration(
+                      labelText: 'Quantity',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => _addToCart(products),
+                    child: const Text('Add to Cart'),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const Text(
+                    'Selected Products',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: _selectedItems.isEmpty
+                        ? const Center(child: Text('No products selected'))
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: _selectedItems.length,
+                            itemBuilder: (context, index) {
+                              final item = _selectedItems[index];
+                              final product = products.firstWhere(
+                                (p) => p.id == item.productId,
+                                orElse: () => Product(
+                                  id: item.productId,
+                                  title: 'Product #${item.productId}',
+                                  price: 0,
+                                  description: '',
+                                  category: '',
+                                  image: '',
+                                  rating: Rating(rate: 0, count: 0),
+                                ),
+                              );
+                              
+                              return ListTile(
+                                title: Text(product.title),
+                                subtitle: Text('Quantity: ${item.quantity}'),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedItems.removeAt(index);
+                                    });
+                                  },
+                                ),
+                              );
                             },
                           ),
-                        );
-                      },
-                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context);
-          },
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _selectedItems.isEmpty
-              ? null
-              : () {
-                  widget.onCreateCart(_selectedItems);
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
                 },
-          child: const Text('Create Cart'),
-        ),
-      ],
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: _selectedItems.isEmpty
+                    ? null
+                    : () {
+                        widget.onCreateCart(_selectedItems);
+                      },
+                child: const Text('Create Cart'),
+              ),
+            ],
+          );
+        }
+        
+        return const AlertDialog(
+          content: Center(child: CircularProgressIndicator()),
+        );
+      },
     );
   }
   
-  void _addToCart() {
+  void _addToCart(List<Product> products) {
     if (_selectedProduct == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a product')),
@@ -143,7 +195,6 @@ class _CreateCartDialogState extends State<CreateCartDialog> {
       return;
     }
     
-    // Check for duplicates
     if (_selectedItems.any((item) => item.productId == _selectedProduct!.id)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('This product is already in the cart')),

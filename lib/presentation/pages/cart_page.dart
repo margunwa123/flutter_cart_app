@@ -37,7 +37,6 @@ class _CartPageState extends State<CartPage> {
   void initState() {
     super.initState();
     context.read<CartBloc>().add(LoadCartsEvent());
-    context.read<ProductBloc>().add(LoadProductsEvent());
   }
 
   @override
@@ -323,7 +322,7 @@ class _CartPageState extends State<CartPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Text(
-        'Showing $entries of $totalItems entries',
+        'Showing $entries of total $totalItems entries',
         style: const TextStyle(fontStyle: FontStyle.italic),
       ),
     );
@@ -556,22 +555,10 @@ class _CartPageState extends State<CartPage> {
     showDialog(
       context: context,
       builder: (context) {
-        return BlocBuilder<ProductBloc, ProductState>(
-          builder: (context, state) {
-            if (state is ProductsLoaded) {
-              return CreateCartDialog(
-                products: state.products,
-                onCreateCart: (List<CartItem> items) {
-                  context.read<CartBloc>().add(
-                    CreateCartEvent(products: items),
-                  );
-                  Navigator.pop(context);
-                },
-              );
-            }
-            return const AlertDialog(
-              content: Center(child: CircularProgressIndicator()),
-            );
+        return CreateCartDialog(
+          onCreateCart: (List<CartItem> items) {
+            context.read<CartBloc>().add(CreateCartEvent(products: items));
+            Navigator.pop(context);
           },
         );
       },
